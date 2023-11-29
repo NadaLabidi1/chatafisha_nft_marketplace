@@ -18,7 +18,7 @@ pub trait NFTContract {
         token_metadata: TokenMetadata,
     ) -> Token;
 
-    fn nft_transfer(&mut self, receiver_id: AccountId, token_id: TokenId);
+    fn nft_transfer(&mut self, receiver_id: AccountId, token_id: TokenId, memo:Option<String>);
 }
 
 // Define the contract structure
@@ -90,7 +90,7 @@ impl Minter {
         let nft_contract = "chatafisha_nft.testnet".to_string().try_into().unwrap();
         // Create a promise to call nft_mint
         let promise = ext_nft::ext(nft_contract)
-            .with_attached_deposit(11000000000000000000000)
+            .with_attached_deposit(200000000000000000000000)
             .with_static_gas(Gas(3 * TGAS))
             .nft_mint(token_id.clone(), receiver_id, token_metadata);
 
@@ -98,30 +98,64 @@ impl Minter {
             // Create a promise to callback unstaking_callback
             Self::ext(env::current_account_id())
                 .with_static_gas(Gas(3 * TGAS))
-                .mint_callback(meetup_ref.clone(), vec.clone()),
+                .mint_callback(meetup_ref.clone(),token_id.clone()),
+        );
+    }
+
+    pub fn transfer_nft(
+        &mut self,
+        receiver_id: AccountId,
+        token_id: TokenId,
+        memo: Option<String>,
+    ) -> Promise {
+        
+        let nft_contract = "chatafisha_nft.testnet".to_string().try_into().unwrap();
+        // Create a promise to call nft_mint
+        let promise = ext_nft::ext(nft_contract)
+            .with_attached_deposit(1)
+            .with_static_gas(Gas(3 * TGAS))
+            .nft_transfer( receiver_id.clone(),token_id.clone(), memo.clone());
+
+        return promise.then(
+            // Create a promise to callback unstaking_callback
+            Self::ext(env::current_account_id())
+                .with_static_gas(Gas(3 * TGAS))
+                .transfer_callback(),
         );
     }
 
     #[private] // Public - but only callable by env::current_account_id()
-    pub fn mint_callback(
+pub fn mint_callback(
+    &mut self,
+    #[callback_result] call_result: Result<Token, PromiseError>,
+    meetup_ref: String,
+    token_id: TokenId,
+) {
+    // Check if the promise succeeded
+    if call_result.is_err() {
+        panic!("There was an error contacting the NFT contract");
+    }
+
+    let mut new_vec = self.marketplacedata.entry(meetup_ref.clone()).or_insert(Vec::new());
+    new_vec.push(token_id.to_string());
+}
+
+    #[private] // Public - but only callable by env::current_account_id()
+    pub fn transfer_callback(
         &mut self,
-        #[callback_result] call_result: Result<Token, PromiseError>,
-        meetup_ref: String,
-        vec: Vec<String>,
+        #[callback_result] call_result: Result<(),PromiseError>,
+        
     ) {
         // Check if the promise succeeded
         if call_result.is_err() {
             panic!("There was an error contacting the NFT contract");
         }
-
-        let mut new_vec = vec;
-        new_vec.push(env::signer_account_id().to_string());
-        self.marketplacedata.insert(meetup_ref, new_vec);
     }
 
     pub fn get_marketplacedata(&self) -> HashMap<String, Vec<String>> {
         self.marketplacedata.clone()
     }
+   
 
     pub fn get_special_data(&self, meetup_ref: String) -> Vec<String> {
         self.marketplacedata.get(&meetup_ref).unwrap().clone()
