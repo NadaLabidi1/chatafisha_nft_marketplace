@@ -123,6 +123,20 @@ impl Minter {
                 .transfer_callback(),
         );
     }
+    // Function to remove a specific token from a collection
+pub fn delete_token_from_collection(&mut self, collection_key: String, token_id: String) {
+    assert!(
+        env::signer_account_id() == env::current_account_id(),
+        "This function is private"
+    );
+
+    if let Some(tokens) = self.marketplacedata.get_mut(&collection_key) {
+        tokens.retain(|token| token != &token_id);
+    } else {
+        panic!("Collection not found");
+    }
+}
+
 
     #[private] // Public - but only callable by env::current_account_id()
 pub fn mint_callback(
